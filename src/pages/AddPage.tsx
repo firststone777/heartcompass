@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { newId } from '../utils/id';
 import { getLastCity, setLastCity } from '../utils/preferences';
-import { searchPlace } from '../services/geocoding';
+import { pickConfidentMatch, searchPlace } from '../services/geocoding';
 import { findPossibleDuplicates, type DuplicateMatch } from '../services/duplicates';
 import { addPlace, places } from '../stores/placesStore';
 import { categories as categoriesSignal } from '../stores/categoriesStore';
@@ -93,12 +93,13 @@ export function AddPage() {
     // la posizione attuale, se disponibile, fa da bias: cercando "Vetro" mentre
     // sei a Trastevere vince il Vetro a due strade da te, non l'omonimo altrove
     const results = await searchPlace(name.trim(), city.trim(), position.value);
-    if (results.length === 0) {
-      setStage({ kind: 'not_found' });
-    } else if (results.length === 1) {
-      resolveLocation(results[0].lat, results[0].lng, 'nominatim', results[0].displayName);
-    } else {
+    const confident = pickConfidentMatch(name.trim(), city.trim(), results);
+    if (confident) {
+      resolveLocation(confident.lat, confident.lng, confident.source === 'photon' ? 'photon' : 'nominatim', confident.displayName);
+    } else if (results.length > 0) {
       setStage({ kind: 'candidates', candidates: results });
+    } else {
+      setStage({ kind: 'not_found' });
     }
   }
 
@@ -173,7 +174,7 @@ export function AddPage() {
       {stage.kind === 'candidates' && (
         <GeocodeCandidatesModal
           candidates={stage.candidates}
-          onChoose={(c) => resolveLocation(c.lat, c.lng, 'nominatim', c.displayName)}
+          onChoose={(c) => resolveLocation(c.lat, c.lng, c.source === 'photon' ? 'photon' : 'nominatim', c.displayName)}
           onManual={() => setStage({ kind: 'manual_pin' })}
           onClose={() => setStage({ kind: 'form' })}
         />

@@ -91,6 +91,10 @@ export function ImportPage() {
     const approved = rows.filter((r) => r.decision === 'approved').length;
     const discarded = rows.filter((r) => r.decision === 'discarded').length;
     const unresolved = rows.filter((r) => r.decision === 'pending' && (r.geocodeStatus === 'ambiguous' || r.geocodeStatus === 'not_found')).length;
+    // distinguere le due cose evita di far sembrare tutto lavoro manuale: la
+    // maggior parte delle righe da risolvere ha già una proposta pronta
+    const conProposta = rows.filter((r) => r.decision === 'pending' && !r.chosen && (r.candidates?.length ?? 0) > 0).length;
+    const daPosizionare = unresolved - conProposta;
     const shown = reviewFilter === 'tutte' ? rows : rows.filter((r) => r.decision === 'pending');
 
     return (
@@ -101,8 +105,11 @@ export function ImportPage() {
             <div class="import-progress-fill" style={{ width: `${(100 * wizardProgress.value.done) / Math.max(1, wizardProgress.value.total)}%` }} />
           </div>
           <p class="hint-text">
-            {wizardProgress.value.done}/{wizardProgress.value.total} elaborati · {approved} approvati · {discarded} scartati · {unresolved} da
-            risolvere {wizardRunning.value ? '· sto ancora cercando…' : ''}
+            {wizardProgress.value.done}/{wizardProgress.value.total} elaborati · {approved} approvati
+            {conProposta > 0 ? ` · ${conProposta} con proposta da confermare` : ''}
+            {daPosizionare > 0 ? ` · ${daPosizionare} da posizionare a mano` : ''}
+            {discarded > 0 ? ` · ${discarded} scartati` : ''}
+            {wizardRunning.value ? ' · sto ancora cercando…' : ''}
           </p>
         </div>
 

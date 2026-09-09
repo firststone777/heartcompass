@@ -12,6 +12,13 @@ import {
   updateRowFields,
 } from '../../stores/importStore';
 
+/** Indirizzo compatto: dal nome completo tiene le parti utili a riconoscere il posto. */
+function shortAddress(candidate: { displayName: string; poiName?: string }): string {
+  const parts = candidate.displayName.split(',').map((p) => p.trim()).filter(Boolean);
+  const withoutName = candidate.poiName ? parts.filter((p) => p !== candidate.poiName) : parts.slice(1);
+  return withoutName.slice(0, 2).join(', ');
+}
+
 const STATUS_LABEL: Record<ImportDraftRow['geocodeStatus'], string> = {
   pending: '⏳ in coda',
   searching: '🔎 cerco…',
@@ -29,6 +36,7 @@ export function ReviewRow(props: { row: ImportDraftRow }) {
 
   const duplicate = row.possibleDuplicateOf ? places.value.find((p) => p.id === row.possibleDuplicateOf) : undefined;
   const isEtnico = row.suggestedCategories.includes('ristorante_etnico');
+  const bestCandidate = row.candidates?.[0];
 
   return (
     <div class={`review-row decision-${row.decision}`}>
@@ -44,6 +52,26 @@ export function ReviewRow(props: { row: ImportDraftRow }) {
 
       {duplicate && (
         <p class="duplicate-inline">⚠️ Forse è già in lista come "{duplicate.name}"</p>
+      )}
+
+      {/* Proposta pronta da confermare con un tap: è quello che trasforma una
+          riga "ambigua" da tre gesti (espandi, cerca, scegli) a uno solo. */}
+      {!row.chosen && bestCandidate && (
+        <div class="review-row-suggestion">
+          <div class="review-row-suggestion-text">
+            <span class="candidate-name">{bestCandidate.poiName ?? bestCandidate.displayName.split(',')[0]}</span>
+            <span class="candidate-coords">{shortAddress(bestCandidate)}</span>
+          </div>
+          <button
+            class="btn btn-primary btn-sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              chooseCandidateForRow(row.id, bestCandidate);
+            }}
+          >
+            Usa
+          </button>
+        </div>
       )}
 
       {!expanded && (

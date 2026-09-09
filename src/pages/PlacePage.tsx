@@ -34,6 +34,11 @@ export function PlacePage(props: { id: string }) {
 
   return (
     <div class="page">
+      {/* indietro esplicito: senza questo su iPhone l'unico modo è lo swipe di sistema */}
+      <button class="back-link" onClick={() => history.back()}>
+        ‹ Indietro
+      </button>
+
       <div class="place-page-header">
         <h1 class="page-title">{place.name}</h1>
         <NavigateButton lat={place.lat} lng={place.lng} />

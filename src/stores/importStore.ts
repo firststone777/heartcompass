@@ -1,7 +1,7 @@
 import { signal } from '@preact/signals';
 import type { GeocodeCandidate, ImportDraftRow } from '../types';
 import { parseImportText, inferCityFromTitle } from '../services/importParser';
-import { searchPlace } from '../services/geocoding';
+import { pickConfidentMatch, searchPlace } from '../services/geocoding';
 import { findPossibleDuplicates } from '../services/duplicates';
 import { places } from './placesStore';
 
@@ -38,13 +38,24 @@ async function resolveOne(row: ImportDraftRow): Promise<void> {
   updateRow(row.id, { geocodeStatus: 'searching' });
   const results = await searchPlace(row.name, row.city);
 
+  // Approva da sola solo quando il match è verificato (nome quasi identico su un
+  // vero locale): tutto il resto diventa una scelta da un tap, mai un salvataggio
+  // a occhi chiusi su coordinate probabilmente sbagliate.
+  const confident = pickConfidentMatch(row.name, row.city, results);
+
   let changes: Partial<ImportDraftRow>;
-  if (results.length === 0) {
-    changes = { geocodeStatus: 'not_found' };
-  } else if (results.length === 1) {
-    changes = { geocodeStatus: 'found', chosen: results[0], chosenSource: 'nominatim', decision: 'approved' };
-  } else {
+  if (confident) {
+    changes = {
+      geocodeStatus: 'found',
+      chosen: confident,
+      chosenSource: confident.source === 'photon' ? 'photon' : 'nominatim',
+      decision: 'approved',
+      candidates: results,
+    };
+  } else if (results.length > 0) {
     changes = { geocodeStatus: 'ambiguous', candidates: results };
+  } else {
+    changes = { geocodeStatus: 'not_found' };
   }
 
   const chosen: GeocodeCandidate | undefined = changes.chosen;
@@ -87,7 +98,7 @@ export function chooseCandidateForRow(rowId: string, candidate: GeocodeCandidate
   const dupes = findPossibleDuplicates({ name: row?.name ?? '', lat: candidate.lat, lng: candidate.lng }, places.value);
   updateRow(rowId, {
     chosen: candidate,
-    chosenSource: 'nominatim',
+    chosenSource: candidate.source === 'photon' ? 'photon' : 'nominatim',
     geocodeStatus: 'found',
     decision: 'approved',
     possibleDuplicateOf: dupes[0]?.place.id,

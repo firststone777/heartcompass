@@ -781,6 +781,30 @@ a {
   margin: 4px 0;
 }
 
+.review-row-suggestion {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 4px;
+  padding: 8px 10px;
+  background: var(--page);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.review-row-suggestion-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.review-row-suggestion-text span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .review-row-editor {
   margin-top: 10px;
   padding-top: 10px;
@@ -840,9 +864,72 @@ a {
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
 }
 
+/* anteprima del posto sopra la mappa (il pin resta visibile, la mappa non si smonta) */
+.map-preview {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  /* la tabbar è fissa sopra la mappa: l'anteprima va tenuta più in alto */
+  bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 10px);
+  z-index: 12;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
+}
+
+.map-preview-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.map-preview-head-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+
+.map-preview-name {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.map-preview-meta {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 2px 0 0;
+}
+
+.map-preview-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.map-preview-actions > * {
+  flex: 1;
+}
+
+.back-link {
+  background: none;
+  border: none;
+  color: var(--fam-1);
+  font-size: 15px;
+  font-weight: 600;
+  padding: 4px 0 8px;
+  margin: 0;
+}
+
 .map-legend {
   position: absolute;
-  bottom: 12px;
+  bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 10px);
   left: 12px;
   right: 12px;
   z-index: 10;
@@ -1051,5 +1138,10 @@ a {
 
   .place-card {
     padding: 16px 18px;
+  }
+
+  .map-preview,
+  .map-legend {
+    bottom: 12px;
   }
 }

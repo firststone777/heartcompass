@@ -1,6 +1,9 @@
 import { db } from '../db/schema';
 import type { GeocodeCandidate } from '../types';
 import { haversineDistanceMeters } from './distance';
+import { similarityRatio } from './textSimilarity';
+import { cleanPlaceName, corePlaceName, distinctiveTokens } from './nameCleanup';
+import { isPoiKind, photonSearch } from './photon';
 import {
   extractFirstUrl,
   isShortenedMapsLink,
@@ -64,6 +67,7 @@ function toCandidate(r: NominatimResult): GeocodeCandidate {
     displayName: r.display_name,
     importance: r.importance ?? 0,
     bbox: bb ? [parseFloat(bb[2]), parseFloat(bb[0]), parseFloat(bb[3]), parseFloat(bb[1])] : undefined,
+    source: 'nominatim',
   };
 }
 
@@ -129,6 +133,7 @@ async function cityBox(city: string): Promise<GeoBox | null> {
 
   const results = await nominatimSearch({ q: city, limit: '1' });
   await saveToCache(key, results.slice(0, 1));
+  if (results[0]) rememberCityCenter(city, { lat: results[0].lat, lng: results[0].lng });
   const bbox = results[0]?.bbox;
   return bbox ? { lonMin: bbox[0], latMin: bbox[1], lonMax: bbox[2], latMax: bbox[3] } : null;
 }
@@ -137,7 +142,8 @@ function dedupe(candidates: GeocodeCandidate[]): GeocodeCandidate[] {
   const seen = new Set<string>();
   const unique: GeocodeCandidate[] = [];
   for (const candidate of candidates) {
-    const key = `${candidate.lat.toFixed(5)},${candidate.lng.toFixed(5)}`;
+    // 4 decimali (~11 m): unisce lo stesso posto restituito da Photon e da Nominatim
+    const key = `${candidate.lat.toFixed(4)},${candidate.lng.toFixed(4)}`;
     if (seen.has(key)) continue;
     seen.add(key);
     unique.push(candidate);
@@ -175,63 +181,183 @@ function searchCacheKey(name: string, city: string, near?: LatLng | null): strin
   return near ? `${base}|@${near.lat.toFixed(2)},${near.lng.toFixed(2)}` : base;
 }
 
+/** Nome proprio del posto dentro un candidato (Photon lo dà separato, Nominatim lo mette in testa). */
+function candidatePoiName(candidate: GeocodeCandidate): string {
+  return candidate.poiName ?? candidate.displayName.split(',')[0]?.trim() ?? '';
+}
+
 /**
- * Cerca un posto per nome, provando strategie sempre più larghe finché non trova
- * qualcosa. In ordine:
- *  1. vicino a dove sei ora (se la posizione è nota) + "nome, città": i due casi
- *     più probabili quando stai aggiungendo un posto mentre giri per la città;
- *  2. ricerca strutturata per punto di interesse (amenity) dentro la città;
- *  3. nome secco ristretto al riquadro della città.
+ * La città deve combaciare per intero, non come sottostringa: mezza Italia ha
+ * una "Via Roma", e con un controllo lasco "Al cantuccio" finisce a San Michele
+ * all'Adige e "The vista terrace" in Turchia (su "Roma street").
+ */
+function cityMatches(candidate: GeocodeCandidate, city: string): boolean {
+  if (!city) return true;
+  const needle = normalizeKey(city);
+
+  // Photon dà la città come campo a sé: è il confronto più affidabile
+  if (candidate.city) return normalizeKey(candidate.city) === needle;
+
+  // Nominatim dà l'indirizzo completo a componenti separate da virgola:
+  // deve combaciare un componente intero
+  return candidate.displayName.split(',').some((part) => normalizeKey(part) === needle);
+}
+
+const AUTO_ACCEPT_SIMILARITY = 0.9;
+const MIN_TOKEN_COVERAGE = 0.6;
+const MIN_SINGLE_RESULT_SIMILARITY = 0.55;
+
+/**
+ * Riconosce il caso "nome accorciato": nella mia lista sta "Shell bistrot
+ * libreria", in OpenStreetMap sta "Shell Bistrot". È attendibile solo se ogni
+ * parola distintiva del nome OSM è presente anche nel mio, se copre una buona
+ * parte del mio nome e se almeno una parola condivisa è abbastanza lunga da
+ * essere davvero caratterizzante: così "Leon's Place Hotel" non viene accettato
+ * su "The B Place Hotel", che condivide solo parole banali.
+ */
+function isNameTruncation(rowName: string, candidateName: string): boolean {
+  const mine = distinctiveTokens(rowName);
+  const theirs = distinctiveTokens(candidateName);
+  if (mine.length === 0 || theirs.length === 0) return false;
+
+  const mineSet = new Set(mine);
+  if (!theirs.every((token) => mineSet.has(token))) return false;
+  if (theirs.length / mine.length < MIN_TOKEN_COVERAGE) return false;
+
+  // La parola più caratterizzante del mio nome deve esserci: senza questo
+  // "Barnum campo de fiori" viene accettato sul "Forno Campo de Fiori", che
+  // condivide solo il nome della piazza.
+  const mostDistinctive = [...mine].sort((a, b) => b.length - a.length)[0];
+  if (!theirs.includes(mostDistinctive)) return false;
+
+  return theirs.some((token) => token.length >= 4);
+}
+
+/**
+ * Sceglie il candidato di cui possiamo fidarci senza chiedere conferma.
+ * Deliberatamente severa: si accetta solo se il nome combacia (alla lettera o
+ * come nome accorciato) E l'oggetto è davvero un locale, non un'area
+ * geografica. Senza il controllo sul tipo, "Sugo Ponte Milvio" finirebbe sul
+ * ponte, "Bitrattoria Casal Bernocchi" in mezzo al quartiere e "Barnum campo de
+ * fiori" sulla piazza. Tutto il resto diventa un candidato da confermare.
+ * Resta valido il comportamento storico: un unico risultato di Nominatim va bene.
+ */
+export function pickConfidentMatch(
+  name: string,
+  city: string,
+  candidates: GeocodeCandidate[],
+): GeocodeCandidate | undefined {
+  const cleaned = cleanPlaceName(name, city);
+  const target = normalizeKey(cleaned);
+
+  const strong = candidates.find((candidate) => {
+    // i risultati Photon portano il tipo OSM: se non è un locale, niente automatismo
+    if (candidate.source === 'photon' && !isPoiKind(candidate.kind)) return false;
+    if (!cityMatches(candidate, city)) return false;
+
+    const poiName = candidatePoiName(candidate);
+    if (similarityRatio(target, normalizeKey(poiName)) >= AUTO_ACCEPT_SIMILARITY) return true;
+    // il "nome accorciato" lo accettiamo solo da Photon, che ci dice il tipo di oggetto
+    return candidate.source === 'photon' && isNameTruncation(cleaned, poiName);
+  });
+  if (strong) return strong;
+
+  // Comportamento storico: un unico risultato di Nominatim vale come conferma,
+  // ma solo se è nella città giusta e se il nome ha almeno una somiglianza
+  // plausibile. Senza questi due paletti "Pescaria" si salvava in Spagna e
+  // "Osteria del sole" sulla "Prenestina Osteria dell'Osa" a Lunghezza.
+  const fromNominatim = candidates.filter((c) => c.source !== 'photon');
+  if (fromNominatim.length === 1) {
+    const only = fromNominatim[0];
+    const plausible = similarityRatio(target, normalizeKey(candidatePoiName(only))) >= MIN_SINGLE_RESULT_SIMILARITY;
+    if (cityMatches(only, city) && plausible) return only;
+  }
+
+  return undefined;
+}
+
+/**
+ * Cerca un posto per nome, provando fonti e formulazioni sempre più larghe
+ * finché non trova qualcosa. In ordine:
+ *  1. Photon (ricerca per nome tollerante agli errori sui dati OSM): è la fonte
+ *     che funziona meglio sui nomi dei locali ed è anche la più rapida, quindi
+ *     se dà un risultato attendibile si chiude qui con una sola chiamata;
+ *  2. Nominatim vicino a dove sei ora (se la posizione è nota) + "nome, città";
+ *  3. nome "essenziale" senza le parole di categoria, su entrambe le fonti;
+ *  4. ricerca strutturata per punto di interesse e nome dentro il riquadro della città.
  * Ritorna tutti i candidati trovati: se sono più di uno la UI li fa scegliere,
  * ed è così che si gestiscono gli omonimi. Non lancia mai eccezioni: se non
  * trova nulla ritorna [].
  */
 export async function searchPlace(name: string, city = '', near?: LatLng | null): Promise<GeocodeCandidate[]> {
-  const trimmed = name.trim();
-  if (!trimmed) return [];
+  const raw = name.trim();
+  if (!raw) return [];
 
-  const key = searchCacheKey(trimmed, city, near);
+  const key = searchCacheKey(raw, city, near);
   const cached = await fetchFromCache(key);
   if (cached) return cached;
 
-  // ogni "fase" può contenere più tentativi, i cui risultati vengono uniti
-  const phases: Array<Array<() => Promise<GeocodeCandidate[]>>> = [];
+  const cleaned = cleanPlaceName(raw, city);
+  const core = corePlaceName(cleaned);
+  const withCity = city ? `${cleaned}, ${city}` : cleaned;
 
-  const firstPhase: Array<() => Promise<GeocodeCandidate[]>> = [];
-  if (near) {
-    firstPhase.push(() =>
-      nominatimSearch({ q: trimmed, viewbox: boxParam(boxAround(near, NEAR_RADIUS_KM)), bounded: '1' }),
-    );
-  }
-  firstPhase.push(() => nominatimSearch({ q: city ? `${trimmed}, ${city}` : trimmed }));
-  phases.push(firstPhase);
-
-  if (city) {
-    phases.push([() => nominatimSearch({ amenity: trimmed, city })]);
-    phases.push([
-      async () => {
-        const box = await cityBox(city);
-        return box ? nominatimSearch({ q: trimmed, viewbox: boxParam(box), bounded: '1' }) : [];
-      },
-    ]);
-  }
-
-  let results: GeocodeCandidate[] = [];
-  for (const phase of phases) {
-    const merged: GeocodeCandidate[] = [];
-    for (const attempt of phase) merged.push(...(await attempt()));
-    const unique = dedupe(merged);
+  const collected: GeocodeCandidate[] = [];
+  const finish = async (): Promise<GeocodeCandidate[]> => {
+    const unique = dedupe(collected);
     // La posizione attuale ordina i risultati solo se c'entra davvero qualcosa:
     // se sto a Roma e cerco un posto di Milano, il più vicino a me non è il più
     // probabile, e in quel caso conta la rilevanza.
-    const nearIsRelevant =
-      near != null && unique.some((c) => haversineDistanceMeters(near, c) < 30000);
-    results = sortCandidates(unique, nearIsRelevant ? near : null);
-    if (results.length > 0) break;
+    const nearIsRelevant = near != null && unique.some((c) => haversineDistanceMeters(near, c) < 30000);
+    const sorted = preferCityMatches(sortCandidates(unique, nearIsRelevant ? near : null), city);
+    await saveToCache(key, sorted);
+    return sorted;
+  };
+
+  // 1. Photon per nome: veloce, e se il nome combacia davvero non serve altro
+  collected.push(...(await photonSearch(withCity, near ?? cityCenterHint(city))));
+  if (pickConfidentMatch(raw, city, collected)) return finish();
+
+  // 2. Nominatim: vicino a me (se so dove sono) e in forma libera "nome, città"
+  if (near) {
+    collected.push(
+      ...(await nominatimSearch({ q: cleaned, viewbox: boxParam(boxAround(near, NEAR_RADIUS_KM)), bounded: '1' })),
+    );
+  }
+  collected.push(...(await nominatimSearch({ q: withCity })));
+  if (collected.length > 0) return finish();
+
+  // 3. nome essenziale, senza le parole di categoria
+  if (core) {
+    const coreWithCity = city ? `${core}, ${city}` : core;
+    collected.push(...(await photonSearch(coreWithCity, near ?? cityCenterHint(city))));
+    if (collected.length === 0) collected.push(...(await nominatimSearch({ q: coreWithCity })));
+    if (collected.length > 0) return finish();
   }
 
-  await saveToCache(key, results);
-  return results;
+  // 4. ultime spiagge su Nominatim: ricerca strutturata e nome nel riquadro città
+  if (city) {
+    collected.push(...(await nominatimSearch({ amenity: cleaned, city })));
+    if (collected.length === 0) {
+      const box = await cityBox(city);
+      if (box) collected.push(...(await nominatimSearch({ q: cleaned, viewbox: boxParam(box), bounded: '1' })));
+    }
+  }
+
+  return finish();
+}
+
+/**
+ * Centro approssimativo della città da usare come preferenza per Photon quando
+ * non conosciamo la posizione dell'utente. Usa solo la cache: se la città non è
+ * mai stata cercata non fa una chiamata in più solo per questo.
+ */
+let cityCenterCache: Record<string, LatLng | null> = {};
+function cityCenterHint(city: string): LatLng | null {
+  if (!city) return null;
+  return cityCenterCache[normalizeKey(city)] ?? null;
+}
+export function rememberCityCenter(city: string, center: LatLng): void {
+  cityCenterCache = { ...cityCenterCache, [normalizeKey(city)]: center };
 }
 
 /** Reverse geocoding best-effort: usato solo per mostrare un'etichetta leggibile su un pin manuale. */

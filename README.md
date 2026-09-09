@@ -7,7 +7,7 @@ Archivio personale di posti da visitare (locali, alberghi, attrazioni, musei…)
 Zero, per sempre. Nessuna API key a pagamento, nessuna carta di credito, nessun piano con soglie di fatturazione:
 
 - **Mappa**: tile vettoriali di [OpenFreeMap](https://openfreemap.org) (gratis per sempre, nessuna key, nessun limite di piano).
-- **Geocoding**: [Nominatim](https://nominatim.org) di OpenStreetMap (gratis, nessuna key; il codice rispetta la sua usage policy: max 1 richiesta/secondo, cache dei risultati, nessuna chiamata ripetuta per la stessa ricerca).
+- **Geocoding**: [Photon](https://photon.komoot.io) e [Nominatim](https://nominatim.org), entrambi gratuiti, senza API key e costruiti sui dati di OpenStreetMap. Photon è interrogato per primo perché è pensato per la ricerca *per nome* dei locali (ed è più rapido); Nominatim resta per gli indirizzi e come rete di sicurezza. Il codice rispetta le rispettive policy: chiamate in coda (max 1/secondo su Nominatim), risultati in cache locale, nessuna ricerca identica ripetuta.
 - **Storage**: IndexedDB del browser (locale, nessun database gestito).
 - **Hosting**: GitHub Pages (statico, gratis).
 
@@ -17,8 +17,8 @@ Zero, per sempre. Nessuna API key a pagamento, nessuna carta di credito, nessun 
 
 Tab **Aggiungi** → scrivi il nome (e opzionalmente la città, precompilata con l'ultima usata) → **Salva**. Da qui:
 
-- Se Nominatim trova **un solo risultato**, il posto viene salvato subito con quelle coordinate: due tap in tutto.
-- Se trova **più risultati**, te li mostra e scegli quello giusto.
+- Se un risultato combacia col nome in modo attendibile, il posto viene salvato subito con quelle coordinate: due tap in tutto.
+- Se i risultati sono più d'uno o non abbastanza sicuri, te li mostra e scegli quello giusto (è così che si gestiscono gli omonimi).
 - Se **non trova nulla**, puoi posizionare il pin a mano su una mappa (trascina la mappa sotto il segnaposto fisso al centro) oppure incollare un link di Google Maps.
 
 Dopo il salvataggio finisci sulla scheda del posto, dove puoi aggiungere categorie, tag, stato, voto e note con calma — non è obbligatorio farlo subito.
@@ -31,7 +31,9 @@ Puoi modificare in qualsiasi momento: nome, città, posizione (pulsante "Modific
 
 ### Mappa
 
-Tab **Mappa**: tutti i posti come pin colorati per categoria (ogni categoria ha un colore scelto liberamente e un'emoji propria, così l'identità non dipende mai solo dal colore), filtrabili con lo stesso pannello filtri della lista. Un tap su un pin apre la scheda del posto.
+Tab **Mappa**: tutti i posti come pin colorati per categoria (ogni categoria ha un colore scelto liberamente e un'emoji propria, così l'identità non dipende mai solo dal colore), filtrabili con lo stesso pannello filtri della lista.
+
+Un tap su un pin apre un'**anteprima in basso** (nome, categorie, distanza, "Naviga", "Apri scheda") senza lasciare la mappa: si possono confrontare due o tre posti della stessa zona senza perdere l'inquadratura. Se si apre la scheda completa, la mappa **ricorda centro e zoom** e al ritorno si riparte esattamente da dove si era — e la scheda ha un pulsante "‹ Indietro" esplicito, oltre allo swipe di sistema.
 
 Il colore di una categoria si assegna già al momento dell'aggiunta rapida (menu a tendina "Categoria" nella schermata Aggiungi): il pin sulla mappa nasce già del colore giusto, senza dover passare dalla scheda del posto. Si possono comunque aggiungere altre categorie in un secondo momento dalla scheda.
 
@@ -53,9 +55,13 @@ In cima alla lista: testo libero (cerca in nome, note e tag) + pulsante **Filtri
 2. Caricare un tuo file `.txt` nello stesso formato (intestazioni di sezione + elenco puntato con `◦`, note tra parentesi).
 3. Incollare il testo direttamente.
 
-Il parser riconosce automaticamente le sezioni (Colazione, Pranzo/cena, Aperitivo…) e mappa parole chiave nel testo su categorie e tag (fermate metro, "anche pranzo", cucine etniche tra parentesi, ecc.). Poi geocodifica ogni riga **in sequenza**, rispettando il limite di Nominatim (circa 1 posto ogni secondo: per ~140 posti ci vogliono un paio di minuti) — puoi cambiare tab e tornare, il progresso resta.
+Il parser riconosce automaticamente le sezioni (Colazione, Pranzo/cena, Aperitivo…) e mappa parole chiave nel testo su categorie e tag (fermate metro, "anche pranzo", cucine etniche tra parentesi, ecc.). Poi geocodifica ogni riga **in sequenza** rispettando i limiti dei servizi (per ~140 posti servono un paio di minuti) — puoi cambiare tab e tornare, il progresso resta.
+
+Prima di interrogare i geocoder i nomi vengono ripuliti: via la città ripetuta in coda ("Marzapane Roma" quando la città è già Roma), apostrofi tipografici normalizzati, e in seconda battuta via anche le parole di categoria ("Shell bistrot libreria" → "Shell", che è come il posto sta in OpenStreetMap).
 
 Alla fine (o anche durante) arrivi alla **revisione**: ogni riga mostra cosa ha trovato il geocoder, un'eventuale somiglianza con un posto già salvato, e i controlli per approvare, correggere (nome, città, categorie, tag, posizione) o scartare. Solo le righe **approvate** vengono salvate quando premi "Importa N posti". Le righe ambigue o non trovate non vanno mai perse: restano nella revisione finché non le risolvi o le scarti tu esplicitamente.
+
+Le righe non risolte automaticamente mostrano già **la proposta migliore con nome e indirizzo e un pulsante "Usa"**: confermarla è un tap solo, senza aprire la riga. L'approvazione automatica invece è deliberatamente severa — scatta solo se il nome combacia (anche in forma accorciata) *e* l'oggetto trovato è davvero un locale, non un'area geografica. Senza quest'ultimo controllo "Sugo Ponte Milvio" finirebbe sul ponte e "Bitrattoria Casal Bernocchi" in mezzo al quartiere: meglio un tap in più che una coordinata sbagliata salvata in silenzio.
 
 ### Invitare altre persone
 
@@ -140,6 +146,7 @@ npm run deploy   # build + pubblica dist/ sul branch gh-pages
 
 ## Limiti noti
 
-- Il geocoding automatico trova ciò che esiste in OpenStreetMap: un locale piccolo che nessuno ha ancora mappato non è trovabile da nessun geocoder, per quanto si affini la ricerca. È normale, ed è proprio per questo che esistono la revisione dell'import, l'incolla-da-Google-Maps e il pin manuale.
+- Il geocoding automatico trova ciò che esiste in OpenStreetMap: un locale piccolo che nessuno ha ancora mappato non è trovabile da nessun geocoder, per quanto si affini la ricerca (verificato interrogando direttamente i dati OSM: diversi posti della lista non ci sono proprio). È normale, ed è proprio per questo che esistono la revisione dell'import, l'incolla-da-Google-Maps e il pin manuale.
+- Non esiste un "conferma tutto" per le proposte non verificate, e non è una dimenticanza: sui dati reali i quasi-omonimi sono frequenti ("Pasticceria Mono" contro *Pasticceria Regoli*, "Bar della cometa" contro *Bar della Pineta*), quindi una conferma in blocco salverebbe silenziosamente coordinate sbagliate. Ogni proposta si conferma con un tap, con nome e indirizzo sotto gli occhi.
 - L'espansione dei link brevi `maps.app.goo.gl` passa da un servizio pubblico gratuito di terze parti (unshorten.me), perché il browser non può seguire quel redirect da solo e l'app non ha un server proprio: è un servizio a cortesia, con limiti di frequenza, e se non risponde l'app ricade automaticamente sul testo condiviso o sul pin manuale.
 - La sincronizzazione fra dispositivi non è automatica: il meccanismo "gratis, facoltativo, disattivato di default" richiesto è l'export/import JSON manuale — niente account né infrastruttura da mantenere.

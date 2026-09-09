@@ -2,7 +2,7 @@
 
 export type PlaceStatus = 'da_provare' | 'visitato' | 'scartato';
 
-export type GeocodeSource = 'nominatim' | 'manual_pin' | 'gmaps_link' | 'manual_coords';
+export type GeocodeSource = 'nominatim' | 'photon' | 'manual_pin' | 'gmaps_link' | 'manual_coords';
 
 export interface Category {
   id: string; // slug, es. "pizzeria"
@@ -44,6 +44,13 @@ export interface GeocodeCandidate {
   importance: number;
   /** riquadro [lonMin, latMin, lonMax, latMax] restituito da Nominatim, usato per limitare le ricerche a una città */
   bbox?: [number, number, number, number];
+  /** nome proprio del punto di interesse, separato dall'indirizzo completo (lo dà Photon) */
+  poiName?: string;
+  /** città del risultato, per capire se siamo nel posto giusto */
+  city?: string;
+  /** tipo OSM del risultato, es. "amenity/cafe" oppure "place/square" */
+  kind?: string;
+  source?: 'nominatim' | 'photon';
 }
 
 export interface GeocodeCacheEntry {
