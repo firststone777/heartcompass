@@ -1,4 +1,4 @@
-# La bussola di Jackie
+# HeartCompass
 
 Archivio personale di posti da visitare (locali, alberghi, attrazioni, musei…), pensato per l'uso dal telefono mentre si è in giro per una città. Funziona offline, non ha account/login, non ha un backend: tutti i dati vivono solo sul tuo dispositivo (IndexedDB del browser).
 
@@ -97,7 +97,7 @@ Se comunque non trova nulla, il posto si salva lo stesso con una delle alternati
 1. **Incolla da Google Maps**: apri il posto in Google Maps, tocca **Condividi** e incolla qui quello che copi. Funzionano sia i link estesi (`https://www.google.com/maps/place/...`) sia i **link brevi** `maps.app.goo.gl`, che l'app prova a espandere; se l'espansione non riesce (è l'unico pezzo che dipende da un servizio esterno gratuito), ricade sul nome e indirizzo contenuti nel messaggio condiviso e li geocodifica, mostrandoti i risultati da confermare.
 2. **Posiziona il pin a mano**: si apre una mappa con un segnaposto fisso al centro, muovi la mappa sotto di esso finché non è nel punto giusto, poi conferma.
 
-Su Android, con la PWA installata, puoi anche saltare il copia-incolla: da Google Maps tocca **Condividi → La bussola di Jackie** e l'app si apre già sulla schermata di aggiunta con nome e posizione pronti.
+Su Android, con la PWA installata, puoi anche saltare il copia-incolla: da Google Maps tocca **Condividi → HeartCompass** e l'app si apre già sulla schermata di aggiunta con nome e posizione pronti.
 
 In nessun caso un posto viene salvato con coordinate inventate: se non geocodifichi né posizioni il pin, semplicemente non si salva ancora (per l'aggiunta rapida) o la riga resta "da risolvere" (nell'import in blocco).
 

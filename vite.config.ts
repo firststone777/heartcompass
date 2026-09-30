@@ -10,8 +10,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['seed/locali-roma.txt'],
       manifest: {
-        name: 'La bussola di Jackie',
-        short_name: 'Bussola',
+        name: 'HeartCompass',
+        short_name: 'HeartCompass',
         description: 'Archivio personale di posti da visitare, con mappa e navigazione offline',
         theme_color: '#2a78d6',
         background_color: '#fcfcfb',

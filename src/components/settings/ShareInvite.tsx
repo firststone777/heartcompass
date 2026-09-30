@@ -7,7 +7,7 @@ function appUrl(): string {
   return `${location.origin}${location.pathname}`;
 }
 
-const INVITE_MESSAGE = 'Sto usando "La bussola di Jackie" per tenere una lista di posti da provare (locali, musei, posti dove andare): prova anche tu, è gratis e funziona anche offline';
+const INVITE_MESSAGE = 'Sto usando "HeartCompass" per tenere una lista di posti da provare (locali, musei, posti dove andare): prova anche tu, è gratis e funziona anche offline';
 
 export function ShareInvite() {
   const url = appUrl();
@@ -16,7 +16,7 @@ export function ShareInvite() {
 
   async function handleNativeShare() {
     try {
-      await navigator.share({ title: 'La bussola di Jackie', text: INVITE_MESSAGE, url });
+      await navigator.share({ title: 'HeartCompass', text: INVITE_MESSAGE, url });
     } catch {
       // l'utente ha annullato la condivisione: nessun errore da mostrare
     }
@@ -42,7 +42,7 @@ export function ShareInvite() {
       </a>
       <a
         class="btn btn-secondary btn-block"
-        href={`mailto:?subject=${encodeURIComponent('La bussola di Jackie')}&body=${encodeURIComponent(fullMessage)}`}
+        href={`mailto:?subject=${encodeURIComponent('HeartCompass')}&body=${encodeURIComponent(fullMessage)}`}
       >
         ✉️ Invita via email
       </a>

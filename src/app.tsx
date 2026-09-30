@@ -32,7 +32,7 @@ export function App() {
   if (!ready) {
     return (
       <div class="boot-screen">
-        <p>La bussola di Jackie…</p>
+        <p>HeartCompass…</p>
       </div>
     );
   }

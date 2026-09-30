@@ -5,12 +5,17 @@ import type { Category, GeocodeCacheEntry, Place } from '../types';
  * Unico database locale dell'app (IndexedDB via Dexie).
  * Tutto vive sul dispositivo: nessuna chiamata di rete per leggere/scrivere dati.
  */
-export class BussolaDB extends Dexie {
+export class HeartCompassDB extends Dexie {
   places!: Table<Place, string>;
   categories!: Table<Category, string>;
   geocodeCache!: Table<GeocodeCacheEntry, string>;
 
   constructor() {
+    // ATTENZIONE: questo nome non va cambiato anche se cambia il nome dell'app.
+    // IndexedDB lega i dati al nome del database: rinominarlo qui equivarrebbe a
+    // partire da un archivio vuoto, lasciando i posti salvati in un database
+    // orfano e invisibile. Lo stesso vale per le chiavi "bussola:" in
+    // localStorage/sessionStorage.
     super('bussola-di-jackie');
     // '*categories' e '*tags' sono indici multiEntry: permettono query rapide
     // "tutti i posti che hanno la categoria X" senza scansionare l'intera tabella.
@@ -50,4 +55,4 @@ export class BussolaDB extends Dexie {
   }
 }
 
-export const db = new BussolaDB();
+export const db = new HeartCompassDB();
