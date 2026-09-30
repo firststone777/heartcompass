@@ -107,7 +107,7 @@ In nessun caso un posto viene salvato con coordinate inventate: se non geocodifi
 npm install              # installa le dipendenze
 npm run dev              # avvia in locale (http://localhost:5173)
 npm test                 # esegue i test (parser import, geocoding, distanza, filtri, CSV…)
-npm run generate-icons   # rigenera le icone PWA in public/icons (serve solo se le cancelli)
+npm run generate-icons   # rigenera le icone PWA in public/icons da assets/icon-source.png
 npm run build            # build di produzione in dist/
 npm run preview          # serve la build di produzione in locale, per un ultimo controllo
 ```
@@ -118,7 +118,7 @@ Il file `public/seed/locali-roma.txt` è il tuo `Locali Roma.txt` originale: è 
 
 Setup una tantum (questa parte richiede per forza il tuo account GitHub, non è automatizzabile da uno script):
 
-1. Crea un repository vuoto su GitHub (es. `bussola-di-jackie`).
+1. Crea un repository vuoto su GitHub (es. `heartcompass`).
 2. `git remote add origin https://github.com/<tuo-utente>/<repo>.git`
 3. Nelle impostazioni del repository → **Pages** → **Source**: scegli **GitHub Actions**.
 
